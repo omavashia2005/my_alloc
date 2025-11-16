@@ -2,13 +2,14 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 #define HEAP_CAP 640000
 #define CHUNK_ALLOCED_CAP 1024
 #define CHUNK_FREED_CAP 1024
 
 typedef struct {
-	void *start;
+	char *start;
 	size_t size;
 } chunk;
 
@@ -29,6 +30,14 @@ void dump_chunk_list(const chunk_list *list){
 	}
 }
 
+
+int chunk_start_compar(const void *a, const void *b){
+	const chunk *a_chunk = a;
+	const chunk *b_chunk = b;
+
+	return a_chunk->start - b_chunk->start;
+}
+
 /*
  const pointer
 	* You cannot modify what p points to
@@ -36,6 +45,17 @@ void dump_chunk_list(const chunk_list *list){
 	* Allows you to walk the list but not edit it, required to FIND a pointer in the list of chunks
 */
 int chunk_list_find(const chunk_list *list, void *ptr){
+
+	chunk key = {
+		.start = ptr
+	};
+
+	chunk *result = bsearch(&key, list->chunks, list->count, sizeof(*list->chunks), chunk_start_compar);
+
+	if(result != 0){
+		assert(list->chunks <= result);
+		return (result - list->chunks) / (sizeof(*list->chunks));
+	}
 	
 	return -1;
 }
@@ -59,8 +79,15 @@ void chunk_list_insert(chunk_list *list, void *ptr, size_t size){
 }
 
 void chunk_list_remove(chunk_list *list, size_t index){
+
+	assert(index <= list->count);
 	
-	return ;
+	for(size_t i = 0; i < list->count; ++i){
+
+		list->chunks[i] = list->chunks[i + 1];
+	}
+
+	list->count --;
 }
 
 
@@ -91,7 +118,17 @@ void *heap_alloc(size_t size){
 
 void heap_free(void *ptr)
 {
-	assert(false && "free NOT implemented");
+	if(ptr != NULL){
+		const int index = chunk_list_find(&alloced_chunks, ptr);
+		
+		assert(index >= 0);
+		
+		chunk_list_insert(&freed_chunks, 					 // array of insertion 
+				  alloced_chunks.chunks[index].start,		        // pointer to start of block of insertion
+				  alloced_chunks.chunks[index].size); 		       // size of insertion
+
+		chunk_list_remove(&alloced_chunks, (size_t) index);
+	}
 }
 
 void heap_collect(){
@@ -100,16 +137,14 @@ void heap_collect(){
 
 int main(){
 
-	for(int i = 0; i < 100; ++i){	
+	for(int i = 0; i < 10; ++i){	
 		void *p = heap_alloc(i);
-		//if (i % 2 == 0){
-			//heap_free(p);
-		//}
+		if (i % 2 == 0){
+			heap_free(p);
+		}
 	}
 
  	dump_chunk_list(&alloced_chunks);
 
 	return 0;
 }
-
-
